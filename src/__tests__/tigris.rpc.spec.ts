@@ -345,6 +345,55 @@ describe("rpc tests", () => {
 			fields: expectedUpdateFields,
 			options: options,
 		});
+		// updateOne implementation calls through to updateMany
+		const [capturedQuery, capturedTx] = capture(spyCollection.updateMany).last();
+
+		// filter passed as it is
+		expect(capturedQuery.filter).toBe(expectedFilter);
+		// updateFields passed as it is
+		expect(capturedQuery.fields).toBe(expectedUpdateFields);
+		// tx passed as it is
+		expect(capturedTx).toBe(undefined);
+		// options.collation passed as it is
+		expect(capturedQuery.options.collation).toBe(expectedCollation);
+		// options.limit === 1 while original was 5
+		expect(capturedQuery.options.limit).toBe(1);
+
+		return updatePromise;
+	});
+
+	it("updateOne with complex object", async () => {
+		const tigris = new Tigris({ ...testConfig, projectName: "db3" });
+		const collection = tigris.getDatabase().getCollection<IBookSeries>(IBookSeries);
+		const spyCollection = spy(collection);
+
+		const expectedFilter = { id: 1 };
+		const expectedCollation: Collation = { case: Case.CaseInsensitive };
+		const expectedUpdateFields: IBookSeries = {
+			id: 1,
+			leadAuthor: {
+				name: "adil",
+				publisher: {
+					address: "1 The Street, The City, The Country",
+					name: "Book publishing inc.",
+				},
+			},
+			books: [
+				{
+					id: 1,
+					title: "Awesome TypeScript",
+					author: "adil",
+				},
+			],
+		};
+		const options = new UpdateQueryOptions(5, expectedCollation);
+
+		const updatePromise = collection.updateOne({
+			filter: expectedFilter,
+			fields: expectedUpdateFields,
+			options: options,
+		});
+		// updateOne implementation calls through to updateMany
 		const [capturedQuery, capturedTx] = capture(spyCollection.updateMany).last();
 
 		// filter passed as it is
@@ -935,4 +984,27 @@ export interface IBookMPK extends TigrisCollectionType {
 	id2?: number;
 	title: string;
 	metadata: object;
+}
+
+export class Publisher {
+	@Field()
+	name: string;
+	@Field()
+	address: string;
+}
+
+export class Author {
+	@Field()
+	name: string;
+	@Field()
+	publisher: Publisher;
+}
+@TigrisCollection("book_series")
+export class IBookSeries implements TigrisCollectionType {
+	@PrimaryKey({ order: 1 })
+	id: number;
+	@Field({ elements: IBook })
+	books: IBook[];
+	@Field()
+	leadAuthor: Author;
 }
